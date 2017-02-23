@@ -79,12 +79,23 @@ class World(object):
 
     def process_caches(self):
         for cache in self.caches:
+            # update scores based on other caches
             cache.possible_videos.sort(key=lambda t: t[1])
             cache.possible_videos.reverse()
             for video, score in cache.possible_videos:
                 if cache.size - video.size >= 0:
                     cache.size -= video.size
                     cache.stored_videos[video.id] = video
+
+    def output_result(self, filename):
+        with open(filename, 'w') as file_obj:
+            file_obj.write(str(len(self.caches)) + "\n")
+            for cache in w.caches:
+                file_obj.write(str(cache.id) + " ")
+                for vid, v in cache.stored_videos.iteritems():
+                    file_obj.write(str(vid) + " ")
+                file_obj.write("\n")
+
 
 # ============ ALI END =============
 
@@ -134,9 +145,11 @@ class World(object):
 
         return obj
 
-with open('me_at_the_zoo.in') as file_obj:
+
+filename = "trending_today"
+with open(filename + '.in') as file_obj:
     w = World.from_file(file_obj)
     w.process_requests()
     w.process_caches()
-    # output_result()
+    w.output_result(filename + '.out')
     # print list(w.videos)
