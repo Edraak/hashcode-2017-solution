@@ -27,6 +27,10 @@ class Cache(Item):
     props = ['id', 'size', 'stored_videos', 'endpoints']
 
 
+class Request(Item):
+    props = ['id', 'video_id', 'endpoint_id', 'count']
+
+
 class World(object):
     videos = []
     endpoints = []
@@ -34,7 +38,6 @@ class World(object):
     caches = []
 
     cache_size_mb = videos_count = endpoints_count = caches_count = reqs_count = None
-
 
 
 # ============ ALI START =============
@@ -78,6 +81,16 @@ class World(object):
                 cache_id, latency = map(int, cache_desc_line.split(' '))
                 endpoint.caches_latencies[cache_id] = latency
                 obj.caches[cache_id].endpoints[endpoint_id] = latency
+
+        for req_id in range(obj.reqs_count):
+            endpoint_desc_line = next(line_iter).strip()
+            video_id, endpoint_id, count = map(int, endpoint_desc_line.split(' '))
+            obj.requests.append(Request(
+                id=req_id,
+                video_id=video_id,
+                endpoint_id=endpoint_id,
+                count=count
+            ))
 
         return obj
 
