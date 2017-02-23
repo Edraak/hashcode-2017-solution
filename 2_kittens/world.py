@@ -41,10 +41,11 @@ class Cache(Item):
     possible_videos = None
 
     def rescore(self, video, endpoints, video_cache):
-        for ep in endpoints:
+        for ep_id, ep in endpoints.iteritems():
             if ep['me'].id in self.possible_videos[video.id][2]:
-                old_socre = (ep['me'].dc_latency - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2] * (self.cache_size_mb / video.size)
-                new_score = (ep['me'].caches_latencies[video_cache] - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2] * (self.cache_size_mb / video.size)
+                #  score =  (endpoint.dc_latency                       - cache_lat)                          * request.count          * (self.cache_size_mb / video.size)
+                old_socre = (ep['me'].dc_latency                       - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2][ep_id]['count'] * (w.cache_size_mb / video.size)
+                new_score = (ep['me'].caches_latencies[video_cache.id] - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2][ep_id]['count'] * (w.cache_size_mb / video.size)
                 self.possible_videos[video.id][1] -= old_socre-new_score
 
 
@@ -98,6 +99,7 @@ class World(object):
 
     def process_caches(self):
         for cache in self.caches:
+            print "processing cache " + str(cache.id)
             # update scores based on other caches
             _possible_videos = list(cache.possible_videos.values())
             _possible_videos.sort(key=lambda t: t[1])
@@ -106,7 +108,7 @@ class World(object):
                 if cache.size - video.size >= 0:
                     cache.size -= video.size
                     cache.stored_videos[video.id] = video
-                    for c in video.possible_caches.items():
+                    for c_id, c in video.possible_caches.iteritems():
                         c.rescore(video, endpoints, cache)
 
     def output_result(self, filename):
