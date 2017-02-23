@@ -18,9 +18,10 @@ class Item(object):
 
 
 class Video(Item):
-    props = ['id', 'size']
+    props = ['id', 'size', 'possible_caches']
     id = None
     size = None
+    possible_caches = None
 
 
 class Endpoint(Item):
@@ -38,6 +39,13 @@ class Cache(Item):
     stored_videos = None
     endpoints = None
     possible_videos = None
+
+    def rescore(self, video, endpoints, video_cache):
+        for ep in endpoints:
+            if ep['me'].id in self.possible_videos[video.id][2]:
+                old_socre = (ep['me'].dc_latency - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2] * (self.cache_size_mb / video.size)
+                new_score = (ep['me'].caches_latencies[video_cache] - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2] * (self.cache_size_mb / video.size)
+                self.possible_videos[video.id][1] -= old_socre-new_score
 
 
 class Request(Item):
@@ -75,6 +83,7 @@ class World(object):
         for request in self.requests:
             endpoint = request.endpoint
             for cache_id, cache_lat in endpoint.caches_latencies.iteritems():
+
                 video = request.video
                 score = (endpoint.dc_latency - cache_lat) * request.count * (self.cache_size_mb / video.size)
                 # print request.video_id, score
@@ -82,8 +91,10 @@ class World(object):
                 if video.id in self.caches[cache_id].possible_videos:
                     # Increase score
                     _possible_videos[request.video.id][1] += score
+                    _possible_videos[request.video.id][2][endpoint.id] = {'me': endpoint, 'count': request.count}
                 else:
-                    _possible_videos[request.video.id] = [request.video, score]
+                    _possible_videos[request.video.id] = [request.video, score, {endpoint.id: {'me': endpoint, 'count': request.count}}]
+                    video.possible_caches[cache_id] = self.caches[cache_id]
 
     def process_caches(self):
         for cache in self.caches:
@@ -91,13 +102,12 @@ class World(object):
             _possible_videos = list(cache.possible_videos.values())
             _possible_videos.sort(key=lambda t: t[1])
             _possible_videos.reverse()
-            for video, score in _possible_videos:
+            for video, score, endpoints in _possible_videos:
                 if cache.size - video.size >= 0:
                     cache.size -= video.size
                     cache.stored_videos[video.id] = video
-                    # Ali here!
-                    # for c in video.caches:
-                    #     c.rescore(v)
+                    for c in video.possible_caches.items():
+                        c.rescore(video, endpoints, cache)
 
     def output_result(self, filename):
         with open(filename, 'w') as file_obj:
@@ -124,7 +134,7 @@ class World(object):
 
         videos_line = next(line_iter).strip()
         obj.videos = tuple(
-            Video(id=index, size=int(size_mb))
+            Video(id=index, size=int(size_mb), possible_caches={})
             for index, size_mb in enumerate(videos_line.split(' '))
         )
 
