@@ -25,7 +25,6 @@ class Endpoint(Item):
 
 class Cache(Item):
     props = ['id', 'size', 'stored_videos', 'endpoints']
-    # TODO: Remaining size
 
 
 class World(object):
@@ -35,6 +34,18 @@ class World(object):
     caches = []
 
     cache_size_mb = videos_count = endpoints_count = caches_count = reqs_count = None
+
+
+
+# ============ ALI START =============
+
+
+    def solve(self):
+        pass
+
+# ============ ALI END =============
+
+
 
     @staticmethod
     def from_file(file_obj):
