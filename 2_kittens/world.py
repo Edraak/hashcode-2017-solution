@@ -153,10 +153,12 @@ class World(object):
         return obj
 
 
-for filename in ['trending_today', 'me_at_the_zoo', 'kittens']:
-    with open(filename + '.in') as file_obj:
-        print 'Start', filename
-        w = World.from_file(file_obj)
-        w.process_requests()
-        w.process_caches()
-        w.output_result(filename + '.out')
+from sys import argv
+filename = argv[1]
+with open(filename) as file_obj:
+    print 'Start', filename
+    w = World.from_file(file_obj)
+    w.process_requests()
+    w.process_caches()
+    w.output_result(filename.replace('.in', '.out'))
+    print 'Done', filename
