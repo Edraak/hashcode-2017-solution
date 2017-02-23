@@ -1,3 +1,5 @@
+from __future__ import division
+
 class Item(object):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
@@ -73,9 +75,9 @@ class World(object):
         for request in self.requests:
             endpoint = request.endpoint
             for cache_id, cache_lat in endpoint.caches_latencies.iteritems():
-                score = (endpoint.dc_latency - cache_lat ) * request.count
-
                 video = request.video
+                score = (endpoint.dc_latency - cache_lat) * request.count * (self.cache_size_mb / video.size)
+                # print request.video_id, score
                 _possible_videos = self.caches[cache_id].possible_videos
                 if video.id in self.caches[cache_id].possible_videos:
                     # Increase score
@@ -93,6 +95,9 @@ class World(object):
                 if cache.size - video.size >= 0:
                     cache.size -= video.size
                     cache.stored_videos[video.id] = video
+                    # Ali here!
+                    # for c in video.caches:
+                    #     c.rescore(v)
 
     def output_result(self, filename):
         with open(filename, 'w') as file_obj:
