@@ -74,15 +74,22 @@ class World(object):
             endpoint = request.endpoint
             for cache_id, cache_lat in endpoint.caches_latencies.iteritems():
                 score = (endpoint.dc_latency - cache_lat ) * request.count
-                self.caches[cache_id].possible_videos.append((request.video, score))
 
+                video = request.video
+                _possible_videos = self.caches[cache_id].possible_videos
+                if video.id in self.caches[cache_id].possible_videos:
+                    # Increase score
+                    _possible_videos[request.video.id][1] += score
+                else:
+                    _possible_videos[request.video.id] = [request.video, score]
 
     def process_caches(self):
         for cache in self.caches:
             # update scores based on other caches
-            cache.possible_videos.sort(key=lambda t: t[1])
-            cache.possible_videos.reverse()
-            for video, score in cache.possible_videos:
+            _possible_videos = list(cache.possible_videos.values())
+            _possible_videos.sort(key=lambda t: t[1])
+            _possible_videos.reverse()
+            for video, score in _possible_videos:
                 if cache.size - video.size >= 0:
                     cache.size -= video.size
                     cache.stored_videos[video.id] = video
@@ -117,7 +124,7 @@ class World(object):
         )
 
         obj.caches = tuple(
-            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={}, possible_videos=[])
+            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={}, possible_videos={})
             for index in range(obj.caches_count)
         )
 
