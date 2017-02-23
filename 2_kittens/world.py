@@ -47,11 +47,11 @@ class Request(Item):
 
     @property
     def video(self):
-        return w[self.video_id]
+        return w.videos[self.video_id]
 
     @property
     def endpoint(self):
-        return w[self.endpoint_id]
+        return w.endpoints[self.endpoint_id]
 
 
 class World(object):
@@ -69,6 +69,23 @@ class World(object):
     def solve(self):
         pass
 
+    def process_requests(self):
+        for request in self.requests:
+            endpoint = request.endpoint
+            for cache_id, cache_lat in endpoint.caches_latencies.iteritems():
+                score = (endpoint.dc_latency - cache_lat ) * request.count
+                self.caches[cache_id].possible_videos.append((request.video, score))
+
+
+    def process_caches(self):
+        for cache in self.caches:
+            cache.possible_videos.sort(key=lambda t: t[1])
+            cache.possible_videos.reverse()
+            for video, score in cache.possible_videos:
+                if cache.size - video.size >= 0:
+                    cache.size -= video.size
+                    cache.stored_videos[video.id] = video
+
 # ============ ALI END =============
 
 
@@ -83,13 +100,13 @@ class World(object):
         obj.videos_count, obj.endpoints_count, obj.reqs_count, obj.caches_count, obj.cache_size_mb = map(int, counts_line.split(' '))
 
         videos_line = next(line_iter).strip()
-        obj.videos = (
+        obj.videos = tuple(
             Video(id=index, size=int(size_mb))
             for index, size_mb in enumerate(videos_line.split(' '))
         )
 
         obj.caches = tuple(
-            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={}, possible_videos={})
+            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={}, possible_videos=[])
             for index in range(obj.caches_count)
         )
 
@@ -119,4 +136,7 @@ class World(object):
 
 with open('me_at_the_zoo.in') as file_obj:
     w = World.from_file(file_obj)
-    print list(w.videos)
+    w.process_requests()
+    w.process_caches()
+    # output_result()
+    # print list(w.videos)
