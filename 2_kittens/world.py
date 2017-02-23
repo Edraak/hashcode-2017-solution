@@ -30,11 +30,12 @@ class Endpoint(Item):
 
 
 class Cache(Item):
-    props = ['id', 'size', 'stored_videos', 'endpoints']
+    props = ['id', 'size', 'stored_videos', 'endpoints', 'possible_videos']
     id = None
     size = None
     stored_videos = None
     endpoints = None
+    possible_videos = None
 
 
 class Request(Item):
@@ -43,6 +44,14 @@ class Request(Item):
     video_id = None
     endpoint_id = None
     count = None
+
+    @property
+    def video(self):
+        return w[self.video_id]
+
+    @property
+    def endpoint(self):
+        return w[self.endpoint_id]
 
 
 class World(object):
@@ -80,14 +89,14 @@ class World(object):
         )
 
         obj.caches = tuple(
-            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={})
+            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={}, possible_videos={})
             for index in range(obj.caches_count)
         )
 
         for endpoint_id in range(obj.endpoints_count):
             endpoint_desc_line = next(line_iter).strip()
             dc_latency, caches_count = map(int, endpoint_desc_line.split(' '))
-            endpoint = Endpoint(id=endpoint_id, dc_latency=int(dc_latency), caches_count=int(caches_count), caches_latencies={})
+            endpoint = Endpoint(id=endpoint_id, dc_latency=dc_latency, caches_count=caches_count, caches_latencies={})
             obj.endpoints.append(endpoint)
 
             for cache in range(caches_count):
