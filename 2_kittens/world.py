@@ -20,7 +20,7 @@ class Video(Item):
 
 
 class Endpoint(Item):
-    props = ['id', 'dc_latency', 'caches_count', 'latencies']
+    props = ['id', 'dc_latency', 'caches_count', 'caches_latencies']
 
 
 class Cache(Item):
@@ -59,13 +59,13 @@ class World(object):
         for endpoint_id in range(obj.endpoints_count):
             endpoint_desc_line = next(line_iter).strip()
             dc_latency, caches_count = map(int, endpoint_desc_line.split(' '))
-            endpoint = Endpoint(id=endpoint_id, dc_latency=int(dc_latency), caches_count=int(caches_count), latencies={})
+            endpoint = Endpoint(id=endpoint_id, dc_latency=int(dc_latency), caches_count=int(caches_count), caches_latencies={})
             obj.endpoints.append(endpoint)
 
             for cache in range(caches_count):
                 cache_desc_line = next(line_iter).strip()
                 cache_id, latency = map(int, cache_desc_line.split(' '))
-                endpoint.latencies[cache_id] = latency
+                endpoint.caches_latencies[cache_id] = latency
                 obj.caches[cache_id].endpoints[endpoint_id] = latency
 
         return obj
