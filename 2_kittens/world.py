@@ -17,18 +17,32 @@ class Item(object):
 
 class Video(Item):
     props = ['id', 'size']
+    id = None
+    size = None
 
 
 class Endpoint(Item):
     props = ['id', 'dc_latency', 'caches_count', 'caches_latencies']
+    id = None
+    dc_latency = None
+    caches_count = None
+    caches_latencies = None
 
 
 class Cache(Item):
     props = ['id', 'size', 'stored_videos', 'endpoints']
+    id = None
+    size = None
+    stored_videos = None
+    endpoints = None
 
 
 class Request(Item):
     props = ['id', 'video_id', 'endpoint_id', 'count']
+    id = None
+    video_id = None
+    endpoint_id = None
+    count = None
 
 
 class World(object):
