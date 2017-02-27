@@ -1,5 +1,8 @@
 from __future__ import division
 
+import operator
+
+
 class Item(object):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
@@ -33,21 +36,30 @@ class Endpoint(Item):
 
 
 class Cache(Item):
-    props = ['id', 'size', 'stored_videos', 'endpoints', 'possible_videos']
+    props = ['id', 'size', 'stored_videos', 'endpoints', 'possible_videos', 'sorted_possible_videos', 'done',
+             'first_time']
     id = None
     size = None
     stored_videos = None
     endpoints = None
     possible_videos = None
+    sorted_possible_videos = None
+    done = None
+    first_time = True
 
     def rescore(self, video_id, ep_id, count, video_cache):
 
         if video_id in self.possible_videos:
-            #  score =  (endpoint.dc_latency                       - cache_lat)                          * request.count          * (self.cache_size_mb / video.size)
             old_score = (w.endpoints[ep_id].dc_latency - w.endpoints[ep_id].caches_latencies[self.id]) * count * (w.cache_size_mb / w.videos[video_id].size)
             new_score = (w.endpoints[ep_id].caches_latencies[video_cache.id] - w.endpoints[ep_id].caches_latencies[self.id]) * count * (w.cache_size_mb / w.videos[video_id].size)
-            self.possible_videos[video_id][0] -= old_score-new_score
+            self.possible_videos[video_id].score -= old_score - new_score
 
+
+class CachePossibleVideo(Item):
+    props = ['video_id', 'score', 'endpoints']
+    video_id = None
+    score = None
+    endpoints = None
 
 class World(object):
     videos = []
@@ -70,31 +82,46 @@ class World(object):
             video_id, endpoint_id, count = map(int, endpoint_desc_line.split(' '))
             endpoint = self.endpoints[endpoint_id]
             for cache_id, cache_lat in endpoint.caches_latencies.iteritems():
-                video = self.videos[video_id]
-                score = (endpoint.dc_latency - cache_lat) * count * (self.cache_size_mb / video.size)
-                # print request.video_id, score
+                score = (endpoint.dc_latency - cache_lat) * count * (self.cache_size_mb / self.videos[video_id].size)
                 _possible_videos = self.caches[cache_id].possible_videos
-                if video.id in self.caches[cache_id].possible_videos:
+                if video_id in _possible_videos:
                     # Increase score
-                    _possible_videos[video_id][0] += score
-                    _possible_videos[video_id][1][endpoint.id] = count
+                    _possible_videos[video_id].score += score
+                    _possible_videos[video_id].endpoints[endpoint_id] = count
                 else:
-                    _possible_videos[video_id] = [score, {endpoint.id: count}]
-                    # video.possible_caches[cache_id] = cache_id
+                    _possible_videos[video_id] = CachePossibleVideo(score=score, endpoints={endpoint_id: count},
+                                                                    video_id=video_id)
+
 
     def process_caches(self):
+        all_done = True
         for cache in self.caches:
-            print "processing cache " + str(cache.id)
-            _possible_videos = list(cache.possible_videos.items())
-            _possible_videos.sort(key=lambda t: t[1][0], reverse=True)
-            for video_id, scoreandendpoints in _possible_videos:
-                if cache.size - self.videos[video_id].size >= 0:
-                    cache.size -= self.videos[video_id].size
-                    cache.stored_videos[video_id] = self.videos[video_id]
-                    for ep_id, count in scoreandendpoints[1].iteritems():
+            print str(cache.id),
+            if cache.done:
+                continue
+            all_done = False
+            if cache.first_time:
+                cache.sorted_possible_videos = list(cache.possible_videos.values())
+                cache.first_time = False
+                cache.sorted_possible_videos.sort(key=lambda t: t.score, reverse=True)
+            else:
+                cache.sorted_possible_videos.sort(key=lambda t: t.score, reverse=True)
+
+            for i, possible_video in enumerate(cache.sorted_possible_videos):
+                if cache.size - self.videos[possible_video.video_id].size >= 0:
+                    cache.size -= self.videos[possible_video.video_id].size
+                    cache.stored_videos[possible_video.video_id] = self.videos[possible_video.video_id]
+                    for ep_id, count in possible_video.endpoints.iteritems():
                         for cache_id, cache_lat in self.endpoints[ep_id].caches_latencies.iteritems():
                             if cache_id != cache.id:
-                                self.caches[cache_id].rescore(video_id, ep_id, count, cache)
+                                self.caches[cache_id].rescore(possible_video.video_id, ep_id, count, cache)
+                    del cache.sorted_possible_videos[i]
+                    del cache.possible_videos[possible_video.video_id]
+                    break
+                else:
+                    if i == len(cache.sorted_possible_videos) - 1:
+                        cache.done = True
+        return all_done
 
     def output_result(self, filename):
         with open(filename, 'w') as file_obj:
@@ -108,7 +135,16 @@ class World(object):
 
 # ============ ALI END =============
 
-
+    @staticmethod
+    def insertionSort(L, reverse=False):
+        lt = operator.gt if reverse else operator.lt
+        for j in xrange(1, len(L)):
+            valToInsert = L[j]
+            i = j - 1
+            while 0 <= i and lt(valToInsert.score, L[i].score):
+                L[i + 1] = L[i]
+                i -= 1
+            L[i + 1] = valToInsert
 
     @staticmethod
     def from_file(file_obj):
@@ -126,7 +162,8 @@ class World(object):
         )
 
         obj.caches = tuple(
-            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={}, possible_videos={})
+            Cache(id=index, size=obj.cache_size_mb, stored_videos={}, endpoints={}, possible_videos={},
+                  sorted_possible_videos=[], done=False, first_time=True)
             for index in range(obj.caches_count)
         )
 
@@ -153,6 +190,16 @@ with open(filename) as file_obj:
     print 'Start', filename
     w = World.from_file(file_obj)
     # w.process_requests()
-    w.process_caches()
+    count = 1
+    print "************** Processing all #", count, "**************\nProcessing Cache # ",
+    while not w.process_caches():
+        print
+        print "Done Processing all #", count
+        print "Caches remaining size",
+        for cache in w.caches:
+            print "Full" if cache.done else cache.size,
+        count += 1
+        print
+        print "************** Processing all #", count, "**************\nProcessing Cache # ",
     w.output_result(filename.replace('.in', '.out'))
     print 'Done', filename
