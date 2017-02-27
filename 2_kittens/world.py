@@ -40,29 +40,13 @@ class Cache(Item):
     endpoints = None
     possible_videos = None
 
-    def rescore(self, video, endpoints, video_cache):
-        for ep_id, ep in endpoints.iteritems():
-            if ep['me'].id in self.possible_videos[video.id][2]:
-                #  score =  (endpoint.dc_latency                       - cache_lat)                          * request.count          * (self.cache_size_mb / video.size)
-                old_socre = (ep['me'].dc_latency                       - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2][ep_id]['count'] * (w.cache_size_mb / video.size)
-                new_score = (ep['me'].caches_latencies[video_cache.id] - ep['me'].caches_latencies[self.id]) * self.possible_videos[video.id][2][ep_id]['count'] * (w.cache_size_mb / video.size)
-                self.possible_videos[video.id][1] -= old_socre-new_score
+    def rescore(self, video_id, ep_id, count, video_cache):
 
-
-class Request(Item):
-    props = ['id', 'video_id', 'endpoint_id', 'count']
-    id = None
-    video_id = None
-    endpoint_id = None
-    count = None
-
-    @property
-    def video(self):
-        return w.videos[self.video_id]
-
-    @property
-    def endpoint(self):
-        return w.endpoints[self.endpoint_id]
+        if video_id in self.possible_videos:
+            #  score =  (endpoint.dc_latency                       - cache_lat)                          * request.count          * (self.cache_size_mb / video.size)
+            old_score = (w.endpoints[ep_id].dc_latency - w.endpoints[ep_id].caches_latencies[self.id]) * count * (w.cache_size_mb / w.videos[video_id].size)
+            new_score = (w.endpoints[ep_id].caches_latencies[video_cache.id] - w.endpoints[ep_id].caches_latencies[self.id]) * count * (w.cache_size_mb / w.videos[video_id].size)
+            self.possible_videos[video_id][0] -= old_score-new_score
 
 
 class World(object):
@@ -80,36 +64,37 @@ class World(object):
     def solve(self):
         pass
 
-    def process_requests(self):
-        for request in self.requests:
-            endpoint = request.endpoint
+    def process_requests(self, line_iter):
+        for req_id in range(self.reqs_count):
+            endpoint_desc_line = next(line_iter).strip()
+            video_id, endpoint_id, count = map(int, endpoint_desc_line.split(' '))
+            endpoint = self.endpoints[endpoint_id]
             for cache_id, cache_lat in endpoint.caches_latencies.iteritems():
-
-                video = request.video
-                score = (endpoint.dc_latency - cache_lat) * request.count * (self.cache_size_mb / video.size)
+                video = self.videos[video_id]
+                score = (endpoint.dc_latency - cache_lat) * count * (self.cache_size_mb / video.size)
                 # print request.video_id, score
                 _possible_videos = self.caches[cache_id].possible_videos
                 if video.id in self.caches[cache_id].possible_videos:
                     # Increase score
-                    _possible_videos[request.video.id][1] += score
-                    _possible_videos[request.video.id][2][endpoint.id] = {'me': endpoint, 'count': request.count}
+                    _possible_videos[video_id][0] += score
+                    _possible_videos[video_id][1][endpoint.id] = count
                 else:
-                    _possible_videos[request.video.id] = [request.video, score, {endpoint.id: {'me': endpoint, 'count': request.count}}]
-                    video.possible_caches[cache_id] = self.caches[cache_id]
+                    _possible_videos[video_id] = [score, {endpoint.id: count}]
+                    # video.possible_caches[cache_id] = cache_id
 
     def process_caches(self):
         for cache in self.caches:
             print "processing cache " + str(cache.id)
-            # update scores based on other caches
-            _possible_videos = list(cache.possible_videos.values())
-            _possible_videos.sort(key=lambda t: t[1])
-            _possible_videos.reverse()
-            for video, score, endpoints in _possible_videos:
-                if cache.size - video.size >= 0:
-                    cache.size -= video.size
-                    cache.stored_videos[video.id] = video
-                    for c_id, c in video.possible_caches.iteritems():
-                        c.rescore(video, endpoints, cache)
+            _possible_videos = list(cache.possible_videos.items())
+            _possible_videos.sort(key=lambda t: t[1][0], reverse=True)
+            for video_id, scoreandendpoints in _possible_videos:
+                if cache.size - self.videos[video_id].size >= 0:
+                    cache.size -= self.videos[video_id].size
+                    cache.stored_videos[video_id] = self.videos[video_id]
+                    for ep_id, count in scoreandendpoints[1].iteritems():
+                        for cache_id, cache_lat in self.endpoints[ep_id].caches_latencies.iteritems():
+                            if cache_id != cache.id:
+                                self.caches[cache_id].rescore(video_id, ep_id, count, cache)
 
     def output_result(self, filename):
         with open(filename, 'w') as file_obj:
@@ -157,15 +142,7 @@ class World(object):
                 endpoint.caches_latencies[cache_id] = latency
                 obj.caches[cache_id].endpoints[endpoint_id] = latency
 
-        for req_id in range(obj.reqs_count):
-            endpoint_desc_line = next(line_iter).strip()
-            video_id, endpoint_id, count = map(int, endpoint_desc_line.split(' '))
-            obj.requests.append(Request(
-                id=req_id,
-                video_id=video_id,
-                endpoint_id=endpoint_id,
-                count=count
-            ))
+        obj.process_requests(line_iter)
 
         return obj
 
@@ -175,7 +152,7 @@ filename = argv[1]
 with open(filename) as file_obj:
     print 'Start', filename
     w = World.from_file(file_obj)
-    w.process_requests()
+    # w.process_requests()
     w.process_caches()
     w.output_result(filename.replace('.in', '.out'))
     print 'Done', filename
